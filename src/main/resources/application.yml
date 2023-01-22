@@ -1,0 +1,44 @@
+topic:
+  general-01:
+    name: general_01_player_ball
+    replication-factor: 2
+    partitions: 3
+  general-02:
+    name: general_05_ball_zone_change
+    replication-factor: 2
+    partitions: 3
+  general-match-team:
+    name: general_match_team
+    replication-factor: 2
+    partitions: 3
+
+spring:
+  application:
+    name: "general-worker-ball-zone-change"
+
+  kafka:
+    streams:
+      application-id: ${spring.application.name}
+      client-id: ${spring.application.name}-stream
+      replication-factor: 2
+      properties:
+        #commit.interval.ms: 100
+        #group-id: <group_id> #this shows up in KafkaStreamsConfiguration
+        default.key.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        default.value.serde: io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde
+        # This is the default: log, fail and stop processing records (stop stream)
+        default.deserialization.exception.handler: org.apache.kafka.streams.errors.LogAndFailExceptionHandler
+        auto-offset-reset: earliest
+        #compression-type: lz4 #this shows up in KafkaStreamsConfiguration
+        #state.cleanup.delay.ms: 600000
+    properties:
+      bootstrap.servers:
+        - ${DATAPLATFORM_IP}:9092
+        - ${DATAPLATFORM_IP}:9093
+      schema.registry.url: "http://${DATAPLATFORM_IP}:8081"
+      auto.register.schemas: true
+      use.latest.version: true
+    # At application startup a missing topic on the broker will not fail the
+    # application startup
+    listener:
+      missing-topics-fatal: false
