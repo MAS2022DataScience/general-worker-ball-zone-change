@@ -3,6 +3,7 @@ package com.mas2022datascience.generalworkerballzonechange.processor;
 import com.mas2022datascience.avro.v1.GeneralBallZoneChange;
 import com.mas2022datascience.avro.v1.GeneralMatchTeam;
 import com.mas2022datascience.avro.v1.PlayerBall;
+import com.mas2022datascience.util.Zones;
 import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 import java.util.Collections;
 import java.util.Map;
@@ -33,7 +34,6 @@ public class KafkaStreamsRunnerDSL {
   @Value(value = "${topic.general-01.name}") private String topicIn;
   @Value(value = "${topic.general-02.name}") private String topicOutBallPossessionChange;
   @Value(value = "${topic.general-match-team.name}") private String topicGeneralMatchTeam;
-  @Value(value = "${topic.general-match-phase.name}") private String topicGeneralMatchPhase;
   @Bean
   public KStream<String, PlayerBall> kStream(StreamsBuilder kStreamBuilder) {
 
@@ -135,14 +135,19 @@ public class KafkaStreamsRunnerDSL {
 
       PlayerBall oldPlayerBall = stateStore.get(key);
 
-      if (oldPlayerBall.getIsBallInPlay().equals("Alive") && value.getIsBallInPlay().equals("Alive")) {
-        if (!oldPlayerBall.getZone().equals(value.getZone())) {
-          value.setPlayerId(String.valueOf(oldPlayerBall.getZone()));
-          stateStore.put(key, value);
-          return new KeyValue<>(key, stateStore.get(key));
-        } else {
+      if (oldPlayerBall.getIsBallInPlay().equals("Alive") && value.getIsBallInPlay()
+          .equals("Alive")) {
+        if (Zones.isInSameZone(oldPlayerBall, value)) {
           stateStore.put(key, value);
           return new KeyValue<>(key, null);
+        } else {
+          // new zone under estimate team left
+          value.setZone(Zones.getZoneLeft(value.getX(), value.getY()));
+          // old zone under estimate team left
+          value.setPlayerId(
+              String.valueOf(Zones.getZoneLeft(oldPlayerBall.getX(), oldPlayerBall.getY())));
+          stateStore.put(key, value);
+          return new KeyValue<>(key, stateStore.get(key));
         }
       } else {
         stateStore.put(key, value);
