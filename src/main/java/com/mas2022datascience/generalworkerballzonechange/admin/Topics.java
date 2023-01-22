@@ -53,7 +53,7 @@ public class Topics {
 
   // creates or alters the topic
   @Bean
-  public NewTopic general02() {
+  public NewTopic generalMatchTeam() {
     return TopicBuilder.name(topicNameGeneralMatchTeam)
         .partitions(topicPartitionsGeneralMatchTeam)
         .replicas(topicReplicationFactorGeneralMatchTeam)
