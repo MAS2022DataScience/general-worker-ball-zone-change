@@ -83,24 +83,22 @@ public class KafkaStreamsRunnerDSL {
 
     transformedStream
         .filter((key, values) -> values != null)//filter out the events where no zone change happened
-        .map((key, value) -> {
-          return KeyValue.pair(key.split("-")[0], // remove the ball id
-            GeneralBallZoneChange.newBuilder()
-              .setTs(value.getTs())
-              .setMatchId(value.getMatchId())
-              .setHomeTeamId("HOME")
-              .setAwayTeamId("AWAY")
-              .setBallX(value.getX())
-              .setBallY(value.getY())
-              .setBallZ(value.getZ())
-              // transformer sets the old zone in the field playerId expecting the home team to be left
-              .setHomeZoneOld(Integer.parseInt(value.getPlayerId()))
-              .setHomeZoneNew(value.getZone())
-              // transformer sets the old zone in the field playerId expecting the away team to be left
-              .setAwayZoneOld(Integer.parseInt(value.getPlayerId()))
-              .setAwayZoneNew(value.getZone())
-              .build());
-        })
+        .map((key, value) -> KeyValue.pair(key.split("-")[0], // remove the ball id
+          GeneralBallZoneChange.newBuilder()
+            .setTs(value.getTs())
+            .setMatchId(value.getMatchId())
+            .setHomeTeamId("HOME")
+            .setAwayTeamId("AWAY")
+            .setBallX(value.getX())
+            .setBallY(value.getY())
+            .setBallZ(value.getZ())
+            // transformer sets the old zone in the field playerId expecting the home team to be left
+            .setHomeZoneOld(Integer.parseInt(value.getPlayerId()))
+            .setHomeZoneNew(value.getZone())
+            // transformer sets the old zone in the field playerId expecting the away team to be left
+            .setAwayZoneOld(Integer.parseInt(value.getPlayerId()))
+            .setAwayZoneNew(value.getZone())
+            .build()))
         .join(teams, (newValue, teamsValue) -> {
           newValue.setHomeTeamId(String.valueOf(teamsValue.getHomeTeamID()));
           newValue.setAwayTeamId(String.valueOf(teamsValue.getAwayTeamID()));
@@ -108,7 +106,7 @@ public class KafkaStreamsRunnerDSL {
         })
         .join(phases, (newValue, phasesValue) -> {
           // change zone depending on the left team (values are specified for the left team
-          if (newValue.getHomeTeamId().equals(Team.getLeftTeamByTimestamp(newValue.getTs(), phasesValue))) {
+          if (newValue.getHomeTeamId().equals(String.valueOf(Team.getLeftTeamByTimestamp(newValue.getTs(), phasesValue)))) {
            newValue.setAwayZoneOld(Zones.invertZoneNumbering(newValue.getHomeZoneOld()));
            newValue.setAwayZoneNew(Zones.invertZoneNumbering(newValue.getHomeZoneNew()));
           } else {
@@ -159,7 +157,9 @@ public class KafkaStreamsRunnerDSL {
 
       if (oldPlayerBall.getIsBallInPlay().equals("Alive") && value.getIsBallInPlay()
           .equals("Alive")) {
-        if (Zones.isInSameZone(oldPlayerBall, value)) {
+        if (Zones.isInSameZone(oldPlayerBall, value)
+            || Zones.getZoneLeft(value.getX(), value.getY()) == -1
+            || Zones.getZoneLeft(oldPlayerBall.getX(), oldPlayerBall.getY()) == -1) {
           stateStore.put(key, value);
           return new KeyValue<>(key, null);
         } else {
