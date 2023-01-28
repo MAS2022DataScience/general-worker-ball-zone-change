@@ -1,8 +1,10 @@
 package com.mas2022datascience.generalworkerballzonechange.processor;
 
 import com.mas2022datascience.avro.v1.GeneralBallZoneChange;
+import com.mas2022datascience.avro.v1.GeneralMatchPhase;
 import com.mas2022datascience.avro.v1.GeneralMatchTeam;
 import com.mas2022datascience.avro.v1.PlayerBall;
+import com.mas2022datascience.util.Team;
 import com.mas2022datascience.util.Zones;
 import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 import java.util.Collections;
@@ -15,7 +17,7 @@ import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
-import org.apache.kafka.streams.kstream.Printed;
+import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.kstream.Transformer;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.state.KeyValueStore;
@@ -34,6 +36,7 @@ public class KafkaStreamsRunnerDSL {
   @Value(value = "${topic.general-01.name}") private String topicIn;
   @Value(value = "${topic.general-02.name}") private String topicOutBallPossessionChange;
   @Value(value = "${topic.general-match-team.name}") private String topicGeneralMatchTeam;
+  @Value(value = "${topic.general-match-phase.name}") private String topicGeneralMatchPhase;
   @Bean
   public KStream<String, PlayerBall> kStream(StreamsBuilder kStreamBuilder) {
 
@@ -55,6 +58,13 @@ public class KafkaStreamsRunnerDSL {
         Consumed.with(Serdes.String(), generalMatchTeamSerde));
     KTable<String, GeneralMatchTeam> teams = streamTeam.toTable(Materialized.as("teamsStore"));
 
+    // match phase
+    final Serde<GeneralMatchPhase> generalMatchPhaseSerde = new SpecificAvroSerde<>();
+    generalMatchPhaseSerde.configure(serdeConfig, false); // `false` for record values
+    KStream<String, GeneralMatchPhase> streamPhase = kStreamBuilder.stream(topicGeneralMatchPhase,
+        Consumed.with(Serdes.String(), generalMatchPhaseSerde));
+    KTable<String, GeneralMatchPhase> phases = streamPhase.toTable(Materialized.as("phasesStore"));
+
     KStream<String, PlayerBall> stream = kStreamBuilder.stream(topicIn,
         Consumed.with(Serdes.String(), playerBallSerde));
 
@@ -73,8 +83,9 @@ public class KafkaStreamsRunnerDSL {
 
     transformedStream
         .filter((key, values) -> values != null)//filter out the events where no zone change happened
-        .mapValues((value) -> {
-          return GeneralBallZoneChange.newBuilder()
+        .map((key, value) -> {
+          return KeyValue.pair(key.split("-")[0], // remove the ball id
+            GeneralBallZoneChange.newBuilder()
               .setTs(value.getTs())
               .setMatchId(value.getMatchId())
               .setHomeTeamId("HOME")
@@ -82,22 +93,33 @@ public class KafkaStreamsRunnerDSL {
               .setBallX(value.getX())
               .setBallY(value.getY())
               .setBallZ(value.getZ())
-              // transformer sets the old zone in the filed playerId
+              // transformer sets the old zone in the field playerId expecting the home team to be left
               .setHomeZoneOld(Integer.parseInt(value.getPlayerId()))
               .setHomeZoneNew(value.getZone())
-              // transformer sets the old zone in the filed playerId
+              // transformer sets the old zone in the field playerId expecting the away team to be left
               .setAwayZoneOld(Integer.parseInt(value.getPlayerId()))
               .setAwayZoneNew(value.getZone())
-              .build();
+              .build());
         })
-        .leftJoin(teams, (newValue, teamsValue) -> {
-            newValue.setHomeTeamId(String.valueOf(teamsValue.getHomeTeamID()));
-            newValue.setAwayTeamId(String.valueOf(teamsValue.getAwayTeamID()));
+        .join(teams, (newValue, teamsValue) -> {
+          newValue.setHomeTeamId(String.valueOf(teamsValue.getHomeTeamID()));
+          newValue.setAwayTeamId(String.valueOf(teamsValue.getAwayTeamID()));
           return newValue;
         })
-//        .to(topicOutBallPossessionChange, Produced.with(Serdes.String(),
-//            generalBallZoneChangeSerde));
-        .print(Printed.<String, GeneralBallZoneChange>toSysOut());
+        .join(phases, (newValue, phasesValue) -> {
+          // change zone depending on the left team (values are specified for the left team
+          if (newValue.getHomeTeamId().equals(Team.getLeftTeamByTimestamp(newValue.getTs(), phasesValue))) {
+           newValue.setAwayZoneOld(Zones.invertZoneNumbering(newValue.getHomeZoneOld()));
+           newValue.setAwayZoneNew(Zones.invertZoneNumbering(newValue.getHomeZoneNew()));
+          } else {
+            newValue.setHomeZoneOld(Zones.invertZoneNumbering(newValue.getHomeZoneOld()));
+            newValue.setHomeZoneNew(Zones.invertZoneNumbering(newValue.getHomeZoneNew()));
+          }
+          return newValue;
+        })
+        .to(topicOutBallPossessionChange, Produced.with(Serdes.String(),
+            generalBallZoneChangeSerde));
+        //.print(Printed.<String, GeneralBallZoneChange>toSysOut());
 
     return stream;
 
@@ -141,9 +163,9 @@ public class KafkaStreamsRunnerDSL {
           stateStore.put(key, value);
           return new KeyValue<>(key, null);
         } else {
-          // new zone under estimate team left
+          // new zone under the estimate of being team left
           value.setZone(Zones.getZoneLeft(value.getX(), value.getY()));
-          // old zone under estimate team left
+          // old zone under the estimate of being team left
           value.setPlayerId(
               String.valueOf(Zones.getZoneLeft(oldPlayerBall.getX(), oldPlayerBall.getY())));
           stateStore.put(key, value);

@@ -11,6 +11,10 @@ topic:
     name: general_match_team
     replication-factor: 2
     partitions: 3
+  general-match-phase:
+    name: general_match_phase
+    replication-factor: 2
+    partitions: 3
 
 spring:
   application:
@@ -28,7 +32,7 @@ spring:
         default.value.serde: io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde
         # This is the default: log, fail and stop processing records (stop stream)
         default.deserialization.exception.handler: org.apache.kafka.streams.errors.LogAndFailExceptionHandler
-        auto-offset-reset: earliest
+        #auto-offset-reset: earliest
         #compression-type: lz4 #this shows up in KafkaStreamsConfiguration
         #state.cleanup.delay.ms: 600000
     properties:
@@ -36,8 +40,8 @@ spring:
         - ${DATAPLATFORM_IP}:9092
         - ${DATAPLATFORM_IP}:9093
       schema.registry.url: "http://${DATAPLATFORM_IP}:8081"
-      auto.register.schemas: true
-      use.latest.version: true
+      #auto.register.schemas: true
+      #use.latest.version: true
     # At application startup a missing topic on the broker will not fail the
     # application startup
     listener:
