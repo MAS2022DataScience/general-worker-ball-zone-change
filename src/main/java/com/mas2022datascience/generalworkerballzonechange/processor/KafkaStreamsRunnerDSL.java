@@ -83,6 +83,7 @@ public class KafkaStreamsRunnerDSL {
 
     transformedStream
         .filter((key, values) -> values != null)//filter out the events where no zone change happened
+        .filter((key, values) -> values.getZone() != null)
         .map((key, value) -> KeyValue.pair(key.split("-")[0], // remove the ball id
           GeneralBallZoneChange.newBuilder()
             .setTs(value.getTs())
