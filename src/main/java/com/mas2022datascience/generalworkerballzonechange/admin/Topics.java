@@ -60,4 +60,21 @@ public class Topics {
         .config(TopicConfig.RETENTION_MS_CONFIG, "-1")
         .build();
   }
+
+  @Value(value = "${topic.general-match-phase.name}")
+  private String topicNameGeneralMatchPhase;
+  @Value(value = "${topic.general-match-phase.partitions}")
+  private Integer topicPartitionsGeneralMatchPhase;
+  @Value(value = "${topic.general-match-phase.replication-factor}")
+  private Integer topicReplicationFactorGeneralMatchPhase;
+
+  // creates or alters the topic
+  @Bean
+  public NewTopic generalMatchPhase() {
+    return TopicBuilder.name(topicNameGeneralMatchPhase)
+        .partitions(topicPartitionsGeneralMatchPhase)
+        .replicas(topicReplicationFactorGeneralMatchPhase)
+        .config(TopicConfig.RETENTION_MS_CONFIG, "-1")
+        .build();
+  }
 }
